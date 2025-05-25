@@ -78,7 +78,7 @@ function extractPaths() {
   });
 
   const uniquePaths = Array.from(pathSet);
-  console.log("✅ Extracted /content/dam paths:");
+  console.log("Extracted /content/dam paths:");
   console.table(uniquePaths);
   return uniquePaths;
 }
