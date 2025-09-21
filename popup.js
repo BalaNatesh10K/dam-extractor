@@ -3,29 +3,28 @@ document.addEventListener("DOMContentLoaded", () => {
   const UNSUPPORTED_EXTENSIONS = ["gif", "svg", "ico", "webp"]; // editable
   const outputDiv = document.getElementById("output");
 
-  // Execute script in the active tab
+  // Execute script in active tab
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     chrome.scripting.executeScript(
       {
         target: { tabId: tabs[0].id },
         func: () => {
-          // Wait a short delay to let dynamic content load
           return new Promise((resolve) => {
             setTimeout(() => {
               const pathSet = new Set();
 
+              // Extract from src and srcset
               document.querySelectorAll("[src], [srcset]").forEach((el) => {
                 const src = el.getAttribute("src");
                 const srcset = el.getAttribute("srcset");
 
                 if (src && src.startsWith("/content/dam")) pathSet.add(src);
-
                 if (srcset) {
                   srcset
                     .split(",")
                     .map((s) => s.trim().split(" ")[0])
-                    .forEach((path) => {
-                      if (path.startsWith("/content/dam")) pathSet.add(path);
+                    .forEach((p) => {
+                      if (p.startsWith("/content/dam")) pathSet.add(p);
                     });
                 }
               });
@@ -36,7 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
               });
 
               resolve(Array.from(pathSet));
-            }, 500); // 500ms delay for dynamic content
+            }, 500); // delay to handle dynamic content
           });
         },
       },
@@ -44,11 +43,17 @@ document.addEventListener("DOMContentLoaded", () => {
         if (chrome.runtime.lastError) {
           outputDiv.textContent =
             "Error: " + chrome.runtime.lastError.message;
+          console.error(chrome.runtime.lastError.message);
           return;
         }
 
         paths = results[0].result || [];
+        console.log("Raw /content/dam paths:", paths);
         displayPaths(paths);
+
+        const { supported, unsupported } = segregatePaths(paths);
+        console.log("Scene7 Supported Paths:", supported);
+        console.log("Unsupported Paths:", unsupported);
       }
     );
   });
@@ -65,9 +70,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ...unsupported,
     ].join("\n");
 
-    navigator.clipboard.writeText(textToCopy).then(() =>
-      showTooltip("Copied to clipboard!")
-    );
+    navigator.clipboard.writeText(textToCopy).then(() => showTooltip("Copied to clipboard!"));
   });
 
   // Save as .txt
@@ -99,9 +102,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const tooltip = document.getElementById("tooltip");
     tooltip.textContent = message;
     tooltip.style.display = "block";
-    setTimeout(() => {
-      tooltip.style.display = "none";
-    }, 2000);
+    setTimeout(() => { tooltip.style.display = "none"; }, 2000);
   }
 
   // Segregate supported vs unsupported
@@ -120,15 +121,16 @@ document.addEventListener("DOMContentLoaded", () => {
     return { supported, unsupported };
   }
 
-  // Display paths in the output div with colors
+  // Display paths in popup div with colors
   function displayPaths(paths) {
     if (!paths || paths.length === 0) {
       outputDiv.textContent = "No paths found...";
+      console.log("No /content/dam paths found on this page.");
       return;
     }
 
     const { supported, unsupported } = segregatePaths(paths);
-    outputDiv.innerHTML = ""; // clear previous content
+    outputDiv.innerHTML = "";
 
     if (supported.length) {
       const header = document.createElement("div");
@@ -153,8 +155,5 @@ document.addEventListener("DOMContentLoaded", () => {
         outputDiv.appendChild(div);
       });
     }
-
-    console.log("Scene7 Supported Paths:", supported);
-    console.log("Unsupported Paths:", unsupported);
   }
 });
