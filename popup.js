@@ -2,31 +2,19 @@ document.addEventListener("DOMContentLoaded", () => {
   let paths = [];
   const UNSUPPORTED_EXTENSIONS = ["gif", "svg", "ico", "webp"]; // editable
 
+  const outputDiv = document.getElementById("output");
+
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     chrome.scripting.executeScript(
-      {
-        target: { tabId: tabs[0].id },
-        function: extractPaths,
-      },
+      { target: { tabId: tabs[0].id }, function: extractPaths },
       (results) => {
         if (chrome.runtime.lastError) {
-          document.getElementById("output").value =
-            "Error: " + chrome.runtime.lastError.message;
+          outputDiv.textContent = "Error: " + chrome.runtime.lastError.message;
           return;
         }
 
         paths = results[0].result || [];
-        const { supported, unsupported } = segregatePaths(paths);
-
-        let outputText = "✅ Scene7 Supported Paths:\n";
-        outputText += supported.join("\n") || "(none)";
-        outputText += "\n\n❌ Unsupported Paths:\n";
-        outputText += unsupported.join("\n") || "(none)";
-
-        document.getElementById("output").value = outputText;
-
-        console.log("Scene7 Supported Paths:", supported);
-        console.log("Unsupported Paths:", unsupported);
+        displayPaths(paths);
       }
     );
   });
@@ -43,9 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ...unsupported,
     ].join("\n");
 
-    navigator.clipboard.writeText(textToCopy).then(() => {
-      showTooltip("Copied to clipboard!");
-    });
+    navigator.clipboard.writeText(textToCopy).then(() => showTooltip("Copied to clipboard!"));
   });
 
   // Save as .txt
@@ -71,56 +57,72 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   });
-});
 
-// Tooltip display logic
-function showTooltip(message) {
-  const tooltip = document.getElementById("tooltip");
-  tooltip.textContent = message;
-  tooltip.style.display = "block";
+  function displayPaths(paths) {
+    const { supported, unsupported } = segregatePaths(paths);
 
-  setTimeout(() => {
-    tooltip.style.display = "none";
-  }, 2000);
-}
+    outputDiv.innerHTML = ""; // clear previous content
 
-// Segregate Scene7 supported vs unsupported based on extensions
-function segregatePaths(paths) {
-  const UNSUPPORTED_EXTENSIONS = ["gif", "svg", "ico", "webp"]; // editable
-  const supported = [];
-  const unsupported = [];
-
-  paths.forEach((path) => {
-    const cleanPath = path.split("?")[0]; // remove query params
-    const ext = cleanPath.split(".").pop().toLowerCase();
-    if (UNSUPPORTED_EXTENSIONS.includes(ext)) {
-      unsupported.push(path);
-    } else {
-      supported.push(path);
-    }
-  });
-
-  return { supported, unsupported };
-}
-
-// This function runs in the page context
-function extractPaths() {
-  const elements = document.querySelectorAll("[src], [srcset]");
-  const pathSet = new Set();
-
-  elements.forEach((el) => {
-    const src = el.getAttribute("src");
-    const srcset = el.getAttribute("srcset");
-
-    if (src && src.startsWith("/content/dam")) pathSet.add(src);
-
-    if (srcset) {
-      const sources = srcset.split(",").map((s) => s.trim().split(" ")[0]);
-      sources.forEach((path) => {
-        if (path.startsWith("/content/dam")) pathSet.add(path);
+    if (supported.length) {
+      outputDiv.innerHTML += "<strong>✅ Scene7 Supported Paths:</strong>\n";
+      supported.forEach(p => {
+        const div = document.createElement("div");
+        div.className = "supported";
+        div.textContent = p;
+        outputDiv.appendChild(div);
       });
     }
-  });
 
-  return Array.from(pathSet);
-}
+    if (unsupported.length) {
+      outputDiv.innerHTML += "<strong>❌ Unsupported Paths:</strong>\n";
+      unsupported.forEach(p => {
+        const div = document.createElement("div");
+        div.className = "unsupported";
+        div.textContent = p;
+        outputDiv.appendChild(div);
+      });
+    }
+
+    console.log("Scene7 Supported Paths:", supported);
+    console.log("Unsupported Paths:", unsupported);
+  }
+
+  function showTooltip(message) {
+    const tooltip = document.getElementById("tooltip");
+    tooltip.textContent = message;
+    tooltip.style.display = "block";
+    setTimeout(() => { tooltip.style.display = "none"; }, 2000);
+  }
+
+  function segregatePaths(paths) {
+    const supported = [];
+    const unsupported = [];
+    paths.forEach((path) => {
+      const cleanPath = path.split("?")[0];
+      const ext = cleanPath.split(".").pop().toLowerCase();
+      if (UNSUPPORTED_EXTENSIONS.includes(ext)) {
+        unsupported.push(path);
+      } else {
+        supported.push(path);
+      }
+    });
+    return { supported, unsupported };
+  }
+
+  function extractPaths() {
+    const elements = document.querySelectorAll("[src], [srcset]");
+    const pathSet = new Set();
+    elements.forEach((el) => {
+      const src = el.getAttribute("src");
+      const srcset = el.getAttribute("srcset");
+
+      if (src && src.startsWith("/content/dam")) pathSet.add(src);
+      if (srcset) {
+        srcset.split(",").map(s => s.trim().split(" ")[0]).forEach(path => {
+          if (path.startsWith("/content/dam")) pathSet.add(path);
+        });
+      }
+    });
+    return Array.from(pathSet);
+  }
+});
